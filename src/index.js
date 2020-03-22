@@ -12,7 +12,11 @@ const {
 const {
   rewriteURIForGET
 } = require('@apollo/client/link/http/rewriteURIForGET')
-const { extractFiles, ReactNativeFile } = require('extract-files')
+const {
+  extractFiles,
+  ReactNativeFile,
+  isExtractableFile
+} = require('extract-files')
 
 /**
  * A React Native [`File`](https://developer.mozilla.org/en-US/docs/Web/API/File)
