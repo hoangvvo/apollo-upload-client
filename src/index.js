@@ -1,19 +1,18 @@
-'use strict'
-
-const { ApolloLink, Observable } = require('apollo-link')
 const {
+  ApolloLink,
+  Observable,
   selectURI,
   selectHttpOptionsAndBody,
   fallbackHttpConfig,
   serializeFetchParameter,
   createSignalIfSupported,
-  parseAndCheckHttpResponse
-} = require('apollo-link-http-common')
+  parseAndCheckHttpResponse,
+  fromError
+} = require('@apollo/client')
 const {
-  extractFiles,
-  isExtractableFile,
-  ReactNativeFile
-} = require('extract-files')
+  rewriteURIForGET
+} = require('@apollo/client/link/http/rewriteURIForGET')
+const { extractFiles, ReactNativeFile } = require('extract-files')
 
 /**
  * A React Native [`File`](https://developer.mozilla.org/en-US/docs/Web/API/File)
@@ -179,7 +178,8 @@ exports.createUploadLink = ({
   fetchOptions,
   credentials,
   headers,
-  includeExtensions
+  includeExtensions,
+  useGETForQueries
 } = {}) => {
   const linkConfig = {
     http: { includeExtensions },
@@ -189,7 +189,7 @@ exports.createUploadLink = ({
   }
 
   return new ApolloLink(operation => {
-    const uri = selectURI(operation, fetchUri)
+    let uri = selectURI(operation, fetchUri)
     const context = operation.getContext()
 
     // Apollo Graph Manager client awareness:
@@ -247,7 +247,24 @@ exports.createUploadLink = ({
       })
 
       options.body = form
-    } else options.body = payload
+    } else {
+      // If requested, set method to GET if there are no mutations.
+      if (
+        useGETForQueries &&
+        !operation.query.definitions.some(
+          definition =>
+            definition.kind === 'OperationDefinition' &&
+            definition.operation === 'mutation'
+        )
+      )
+        options.method = 'GET'
+
+      if (options.method === 'GET') {
+        const { newURI, parseError } = rewriteURIForGET(uri, body)
+        if (parseError) return fromError(parseError)
+        uri = newURI
+      } else options.body = payload
+    }
 
     return new Observable(observer => {
       // If no abort controller signal was provided in fetch options, and the
